@@ -1,0 +1,50 @@
+type JsonElement {
+    def toString() -> string;
+    case Object(map: HashMap<string, JsonElement>) {
+        def toString() -> string {
+            var json_builder = StringBuilder.new();
+            json_builder.puts("{");
+            var json_keys = Maps.keyList(map);
+            var json_keys_length = Lists.length(json_keys);
+            for (i = 0; i < json_keys_length; i++) {
+                var key: string = Lists.get(json_keys, i);
+                json_builder.puts("\"").puts(key).puts("\"").puts(":");
+                var json_element = map[key];
+                match (json_element) {
+                    Object(_) => json_builder.puts(json_element.toString());
+                    Value(_) => json_builder.puts("\"").puts(json_element.toString()).puts("\"");
+                }
+                if (i != json_keys_length - 1) json_builder.puts(",");
+            }
+            json_builder.puts("}");
+            return json_builder.toString();
+        }
+        def add(key: string, value: JsonElement) {
+            map[key] = value;
+        }
+    }
+    case Value(val: string) {
+        def toString() -> string {
+            return val;
+        }
+    }
+}
+
+class Json {
+    var value: JsonElement.Object;
+    new() {
+        var m = HashMap<string, JsonElement>.new(Strings.hash, Strings.equal);
+        this.value = JsonElement.Object(m);
+    }
+    def toString() -> string {
+        return this.value.toString();
+    }
+    def add_string(key: string, val: string) -> Json {
+        this.value.add(key, JsonElement.Value(val));
+        return this;
+    }
+    def add_json(key: string, val: Json) -> Json {
+        this.value.add(key, val.value);
+        return this;
+    }
+}

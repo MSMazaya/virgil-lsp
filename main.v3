@@ -1,0 +1,15 @@
+def hash(str: string) -> int {
+    var hashval = str.length;
+    for (c in str) hashval = hashval * 31 + c;
+    return hashval;
+}
+
+def main() {
+    var j = Json.new()
+                .add_string("a", "A")
+                .add_json("b",
+                        Json.new()
+                            .add_string("c","C")
+    );
+    System.puts(j.toString());
+}
