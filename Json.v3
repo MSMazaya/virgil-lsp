@@ -124,8 +124,6 @@ component Jsons {
                         right_pointer++;
                         state = ParsingState.ARRAY_VALUE;
                     } else if(json_string[right_pointer] == '{') {
-                        left_pointer = right_pointer;
-                        right_pointer++;
                         state = ParsingState.OBJECT_VALUE;
                     } else if(json_string[right_pointer] == '\"') {
                         left_pointer = right_pointer;
@@ -166,19 +164,10 @@ component Jsons {
                     }
                 }
                 OBJECT_VALUE => {
-                    var lparen_counter = 1;
-                    // TODO: checking if right_pointer out of bound
-                    while (lparen_counter > 0) {
-                        right_pointer++;
-                        if(json_string[right_pointer] == '}') {
-                            lparen_counter--;
-                        } else if(json_string[right_pointer] == '{') {
-                            lparen_counter++;
-                        } 
-                    }
-                    result.add_json(key, 
-                            Jsons.fromString(Arrays.range(json_string, left_pointer, right_pointer+1))
-                    );
+                    // the right_pointer does not match the 
+                    var obj = Jsons.fromString(Arrays.range(json_string, right_pointer, json_string.length));
+                    result.add_json(key, obj);
+                    right_pointer += obj.toString().length;
                     state = ParsingState.END;
                 }
                 ARRAY_VALUE => {
@@ -201,6 +190,7 @@ component Jsons {
                     } else if(json_string[right_pointer] == '}') {
                         break;
                     } else {
+                        while(true);
                     }
                 }
             }
