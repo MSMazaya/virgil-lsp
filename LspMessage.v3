@@ -1,0 +1,12 @@
+def Encode(message: Json) -> string {
+    var sb = StringBuilder.new();
+    var message_string = message.toString();
+    sb.puts("Content-Length: ").putd(message_string.length).puts("\r\n\r\n");
+    sb.puts(message_string);
+    return sb.toString();
+}
+
+def Decode(json_string: string) -> Json {
+    // TODO: implement
+    return Json.new();
+}

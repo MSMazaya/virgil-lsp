@@ -8,12 +8,11 @@ type JsonElement {
             var json_keys_length = Lists.length(json_keys);
             for (i = 0; i < json_keys_length; i++) {
                 var key: string = Lists.get(json_keys, i);
-                json_builder.puts("\"").puts(key).puts("\"").puts(":");
-                var json_element = map[key];
-                match (json_element) {
-                    Object(_) => json_builder.puts(json_element.toString());
-                    Value(_) => json_builder.puts("\"").puts(json_element.toString()).puts("\"");
-                }
+                json_builder.puts("\"")
+                            .puts(key)
+                            .puts("\"")
+                            .puts(":")
+                            .puts(map[key].toString());
                 if (i != json_keys_length - 1) json_builder.puts(",");
             }
             json_builder.puts("}");
@@ -39,12 +38,173 @@ class Json {
     def toString() -> string {
         return this.value.toString();
     }
-    def add_string(key: string, val: string) -> Json {
+    def add_value(key: string, val: string) -> Json {
         this.value.add(key, JsonElement.Value(val));
+        return this;
+    }
+    def add_string(key: string, val: string) -> Json {
+        var sb = StringBuilder.new();
+        sb.puts("\"").puts(val).puts("\"");
+        this.value.add(key, JsonElement.Value(sb.toString()));
         return this;
     }
     def add_json(key: string, val: Json) -> Json {
         this.value.add(key, val.value);
         return this;
+    }
+}
+
+enum ParsingState {
+    INITIAL,
+    KEY,
+    SEMICOLON,
+    DETERMINING_VALUE_TYPE,
+    PRIMITIVE_VALUE,
+    STRING_VALUE,
+    ARRAY_VALUE,
+    OBJECT_VALUE,
+    END
+}
+
+component Jsons {
+    def fromString(json_string: string) -> Json {
+        var result = Json.new();
+        var left_pointer = 0, right_pointer = 0;
+        if (json_string[right_pointer] != '{') {
+            // TODO return error
+            return result;
+        }
+        // advances {
+        right_pointer++;
+        var state = ParsingState.INITIAL;
+        var key = "";
+        while (right_pointer < json_string.length) {
+            match (state) {
+                INITIAL => {
+                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                        right_pointer++;
+                    } else if (json_string[right_pointer] == '\"') {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.KEY;
+                    } else if (json_string[right_pointer] == '}') {
+                        break;
+                    } else {
+                        // TODO return error
+                    }
+                }
+                KEY => {
+                    // TODO: its a string, consider edge cases on \\b, \\n, etc.
+                    if(json_string[right_pointer] != '\"') {
+                        right_pointer++;
+                    } else {
+                        // left_pointer + 1 and right_pointer without - 1 for stripping ""
+                        key = Arrays.range(json_string, left_pointer+1, right_pointer);
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.SEMICOLON;
+                    }
+                }
+                SEMICOLON => {
+                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                        right_pointer++;
+                    } if(json_string[right_pointer] == ':') {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.DETERMINING_VALUE_TYPE;
+                    } else {
+                        // TODO return error
+                    }
+                }
+                DETERMINING_VALUE_TYPE => {
+                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                        right_pointer++;
+                    } else if(json_string[right_pointer] == '[') {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.ARRAY_VALUE;
+                    } else if(json_string[right_pointer] == '{') {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.OBJECT_VALUE;
+                    } else if(json_string[right_pointer] == '\"') {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.STRING_VALUE;
+                    }  else {
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.PRIMITIVE_VALUE;
+                    }
+                }
+                STRING_VALUE => {
+                    if(json_string[right_pointer] == '\"') {
+                        result.add_value(key, Arrays.range(json_string, left_pointer, right_pointer + 1));
+                        right_pointer++;
+                        state = ParsingState.END;
+                    } else if(json_string[right_pointer] == '\\') {
+                        right_pointer++;
+                        // TODO: check bound
+                        if(json_string[right_pointer] == 'u') {
+                            right_pointer+=4;
+                        } else {
+                            right_pointer++;
+                        }
+                    } else {
+                        right_pointer++;
+                    }
+                }
+                PRIMITIVE_VALUE => {
+                    // TODO: this will not work for string, add STRING_VALUE
+                    if(json_string[right_pointer] == ',' 
+                        || json_string[right_pointer] == '}'
+                        || Strings.isWhiteSpace(json_string[right_pointer])) {
+                        result.add_value(key, Arrays.range(json_string, left_pointer, right_pointer));
+                        state = ParsingState.END;
+                    } else {
+                        right_pointer++;
+                    }
+                }
+                OBJECT_VALUE => {
+                    var lparen_counter = 1;
+                    // TODO: checking if right_pointer out of bound
+                    while (lparen_counter > 0) {
+                        right_pointer++;
+                        if(json_string[right_pointer] == '}') {
+                            lparen_counter--;
+                        } else if(json_string[right_pointer] == '{') {
+                            lparen_counter++;
+                        } 
+                    }
+                    result.add_json(key, 
+                            Jsons.fromString(Arrays.range(json_string, left_pointer, right_pointer+1))
+                    );
+                    state = ParsingState.END;
+                }
+                ARRAY_VALUE => {
+                    // TODO: add assertion of non-valid array value
+                    if(json_string[right_pointer] == ']') {
+                        result.add_value(key, Arrays.range(json_string, left_pointer, right_pointer+1));
+                        left_pointer = right_pointer;
+                        right_pointer++;
+                        state = ParsingState.END;
+                    } else {
+                        right_pointer++;
+                    }
+                }
+                END => {
+                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                        right_pointer++;
+                    } else if(json_string[right_pointer] == ',') {
+                        right_pointer++;
+                        state = ParsingState.INITIAL;
+                    } else if(json_string[right_pointer] == '}') {
+                        break;
+                    } else {
+                    }
+                }
+            }
+        }
+        return result;
     }
 }
