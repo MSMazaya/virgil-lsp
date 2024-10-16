@@ -21,6 +21,9 @@ type JsonElement {
         def add(key: string, value: JsonElement) {
             map[key] = value;
         }
+        def get(key: string) -> JsonElement {
+            return map[key];
+        }
     }
     case Value(val: string) {
         def toString() -> string {
@@ -38,14 +41,33 @@ class Json {
     def toString() -> string {
         return this.value.toString();
     }
+	// def putd<T>(i: T) -> this {
+	// 	match (i) {
+	// 		x: u32 => putd_u32(x);
+	// 		x: i32 => putd_i32(x);
+	// 		x: u64 => putd_u64(x);
+	// 		x: i64 => putd_i64(x);
+	// 		_ => System.error("TypeError", "not an integer");
+	// 	}
+	// }
+
+    // TODO: is there a better way to do this?
+    // getting string everytime and needing to transform it to
+    // json is tedious
+    //
+    // idea: to have base method of get() in JsonElement
+    //       but forces it to panic when used in Value
+    def get(key: string) -> string {
+        return this.value.get(key).toString();
+    }
     def add_value(key: string, val: string) -> Json {
         this.value.add(key, JsonElement.Value(val));
         return this;
     }
     def add_string(key: string, val: string) -> Json {
-        var sb = StringBuilder.new();
-        sb.puts("\"").puts(val).puts("\"");
-        this.value.add(key, JsonElement.Value(sb.toString()));
+        var buf = StringBuilder.new();
+        buf.puts("\"").puts(val).puts("\"");
+        this.value.add(key, JsonElement.Value(buf.toString()));
         return this;
     }
     def add_json(key: string, val: Json) -> Json {
