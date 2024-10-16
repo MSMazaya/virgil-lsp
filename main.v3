@@ -1,23 +1,8 @@
-/*
-HashMap<string, JsonElement>
-*/
-
 def main() {
-    //var j = Json.new()
-    //            .add_string("a", "A")
-    //            .add_json("b",
-    //                    Json.new()
-    //                        .add_string("c","C")
-    //);
-    // TODO: last before edge case on [whitespace]}
-    var j = Jsons.fromString("{\"very\":\"nice\", \"a\":{\"key\":[1,2,\"nice!\"]}}").add_string("test","yo");
-    System.puts(j.toString());
-
-    //def STDIN = 0;
-    //var sb = StringBuilder.new();
-    //while (true) {
-    //    var ch = System.fileRead(STDIN);
-    //    sb.putc(byte.!(ch));
-    //    if (ch == '\n') System.puts(sb.toString());
-    //}
+    def STDIN = 0;
+    var buf = StringBuilder.new();
+    while (true) {
+        var message = LspMessage.getMessage();
+        System.puts(message.toString());
+    }
 }
