@@ -1,8 +1,14 @@
+def log(file_descriptor: int, log_message: string) {
+    System.fileWriteK(file_descriptor, log_message, 0, log_message.length);
+}
+
 def main() {
     def STDIN = 0;
     var buf = StringBuilder.new();
+    var log_file_fd = System.fileOpen("log.txt", false);
     while (true) {
-        var message = LspMessage.getMessage();
-        System.puts(message.toString());
+        var request = LspClient.getRequest();
+        LspClient.sendResponse(request);
+        log(log_file_fd, request.toString());
     }
 }
