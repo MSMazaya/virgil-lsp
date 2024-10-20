@@ -456,7 +456,7 @@ component Jsons {
             x: Json.Bool => {
                 if(T.?(x.val))
                     return T.!(x.val);
-                System.error("TypeError", "not a supported type for unboxing Json.Number");
+                System.error("TypeError", "not a supported type for unboxing Json.Bool");
                 return T.!(null);
             }
             x: Json.Number => {
@@ -472,7 +472,7 @@ component Jsons {
                         System.error("TypeError", "not a supported type for unboxing Json.Number(JsonNumber.Float)");
                    }
                 }
-                System.error("TypeError", "not a supported type for unboxing Json.Bool");
+                System.error("TypeError", "not a supported type for unboxing Json.Number");
                 return T.!(null);
             }
             x: Json.Null => {
