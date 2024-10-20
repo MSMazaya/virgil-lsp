@@ -1,17 +1,17 @@
-def createBaseResponse() -> JsonElement.Object {
+def createBaseResponse() -> Json.Object {
     var base_response = Jsons.newObject();
     base_response.set("json_rpc", "\"2.0\"");
     return base_response;
 }
 
-def createInitializeResponse() -> JsonElement.Object {
+def createInitializeResponse() -> Json.Object {
     var response = createBaseResponse();
     response.set("capabilities", Jsons.newObject());
     return response;
 }
 
 component LspMessage {
-    def getResponseByMethod(method: string) -> JsonElement.Object {
+    def getResponseByMethod(method: string) -> Json.Object {
         if(Strings.equal(method,"initialize")) {
             return createInitializeResponse();
         }

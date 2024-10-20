@@ -1,209 +1,433 @@
-type JsonElement {
+type JsonNumber {
     def toString() -> string;
-    def get(key: string) -> JsonElement;
-    def set<T>(key: string, val: T);
-    case Object(map: HashMap<string, JsonElement>) {
+    case Int(val: int) {
         def toString() -> string {
-            var json_builder = StringBuilder.new();
-            json_builder.puts("{");
+            return StringBuilder.new().putd(val).toString();
+        }
+        def unbox() -> int {
+            return val;
+        }
+    }
+    case Float(val: float) {
+        def toString() -> string {
+            // TODO: implement string to float
+            return "";
+        }
+        def unbox() -> float {
+            return val;
+        }
+    }
+}
+
+type Json {
+    def toJsonString() -> string;
+    def get<T>(key: T) -> Json;
+    def set<K, T>(key: K, val: T);
+    case Object(map: HashMap<string, Json>) {
+        def toJsonString() -> string {
+            var buf = StringBuilder.new();
+            buf.puts("{");
             var json_keys = Maps.keyList(map);
             var json_keys_length = Lists.length(json_keys);
             for (i = 0; i < json_keys_length; i++) {
                 var key: string = Lists.get(json_keys, i);
-                json_builder.puts("\"")
+                buf.puts("\"")
                             .puts(key)
                             .puts("\"")
                             .puts(":")
-                            .puts(map[key].toString());
-                if (i != json_keys_length - 1) json_builder.puts(",");
+                            .puts(map[key].toJsonString());
+                if (i != json_keys_length - 1) buf.puts(",");
             }
-            json_builder.puts("}");
-            return json_builder.toString();
+            buf.puts("}");
+            return buf.toString();
         }
-        def get(key:string) -> JsonElement {
-            return map[key];
+        def get<T>(key:T) -> Json {
+            var result: Json;
+            match (key) {
+                x: string => result = map[x];
+                x: Array<byte> => result = map[x];
+                // TODO: change to return null
+                _ => System.error("TypeError", "Json.Object getter index must be a string");
+            }
+            return result;
         }
-        def set<T>(key: string, val: T) {
-            map[key] = Jsons.create(val);
+        def set<K, T>(key: K, val: T) {
+            match (key) {
+                x: string => map[x] = Jsons.from(val);
+                x: Array<byte> => map[x] = Jsons.from(val);
+                _ => System.error("TypeError", "Json.Object setter index must be a string");
+            }
+        }
+        def unbox() -> HashMap<string, Json> {
+            return map;
         }
     }
-    case Value(val: string) {
-        def toString() -> string {
+    case Array(vec: Vector<Json>) {
+        def toJsonString() -> string {
+            var buf = StringBuilder.new();
+            buf.putc('[');
+            for(i = 0; i < vec.length; i++) {
+                buf.puts(vec[i].toJsonString());
+                if(i != vec.length - 1)
+                    buf.putc(',');
+            }
+            buf.putc(']');
+            return buf.toString();
+        }
+        def get<T>(key:T) -> Json {
+            var result: Json;
+            match (key) {
+                i: int => result = vec[i];
+                _ => System.error("TypeError", "Json.Array getter index must be an integer");
+            }
+            return result;
+        }
+        def set<K, T>(key: K, val: T) {
+            match (key) {
+                i: int => vec[i] = Jsons.from(val);
+                _ => System.error("TypeError", "Json.Array setter index must be an integer");
+            }
+        }
+        def unbox() -> Vector<Json> {
+            return vec;
+        }
+        def put(el:Json) {
+            vec.put(el);
+        }
+    }
+    case String(val: string) {
+        def toJsonString() -> string {
+            return StringBuilder.new().putc('\"').puts(val).putc('\"').toString();
+        }
+        def unbox() -> string {
             return val;
         }
-        def get(key:string) -> JsonElement {
-            // TODO: fix this, this should return null instead (somehow)
-            return JsonElement.Value(val);
+        // TODO: implement get that returns null
+    }
+    case Number(val: JsonNumber) {
+        def toJsonString() -> string {
+            return StringBuilder.new().puts(val.toString()).toString();
         }
-        def set<T>(key: string, val: T) {
-            // TODO: is there a better way to implement "ignore it"
+        def unboxInt() -> int {
+            match (val) {
+                i: JsonNumber.Int => return i.unbox();
+                _ => System.error("TypeError", "Json.Number value must be JsonNumber.Int for unboxInt");
+            }
+            return 0;
         }
+        def unboxFloat() -> float {
+            match (val) {
+                f: JsonNumber.Float => return f.unbox();
+                _ => System.error("TypeError", "Json.Number value must be JsonNumber.Float for unboxFloat");
+            }
+            return 0f;
+        }
+        // TODO: implement get that returns null
+    }
+    case Bool(val: bool) {
+        def toJsonString() -> string {
+            return if(val, "true", "false");
+        }
+        def unbox() -> bool {
+            return val;
+        }
+        // TODO: implement get that returns null
+    }
+    case Null {
+        def toJsonString() -> string {
+            return "null";
+        }
+        // TODO: implement get and unbox that returns null
     }
 }
 
-enum ParsingState {
+def parseString(json_string: string) -> (Json.String, int) {
+    var i = 1;
+    var result_string = "";
+    // TODO: return error if not valid string (no ending \" and instead terminates when it reaches the end)
+    while(i < json_string.length) {
+        if(json_string[i] == '\"') {
+            result_string = Arrays.range(json_string, 0, i + 1);
+            break;
+        } else if(json_string[i] == '\\') {
+            i++;
+            // TODO: check bound
+            if(json_string[i] == 'u') {
+                i+=4;
+            } else {
+                i++;
+            }
+        } else {
+            i++;
+        }
+    }
+    return (Json.String(result_string), i);
+}
+
+enum NumberParsingState {
+    INITIAL,
+    FRACTION,
+    EXPONENT,
+}
+
+def parseNumber(json_string: string) -> (Json.Number, int) {
+    var left_pointer = 0, right_pointer = 0;
+    var is_negative = false, is_float = false;
+    var state = NumberParsingState.INITIAL;
+    var integer = 1, fraction = 1, exponent = 1;
+    while(right_pointer < json_string.length) {
+        match(state) {
+            INITIAL => {
+                // TODO: check bound, if len - 1 then assign integer
+                if(json_string[right_pointer] == '-') {
+                    is_negative = true;
+                    // move forward to the number
+                    right_pointer++;
+                    left_pointer = right_pointer;
+                } else if(Chars.isDecimal(json_string[right_pointer])) {
+                    right_pointer++;
+                } else {
+                    integer = Ints.parseDecimal(
+                                Arrays.range(json_string, left_pointer, right_pointer), 0).1;
+                    if(json_string[right_pointer] == '.') {
+                        right_pointer++;
+                        left_pointer = right_pointer;
+                        is_float = true;
+                        state = NumberParsingState.FRACTION;
+                    } else if(json_string[right_pointer] == 'e' || json_string[right_pointer] == 'E') {
+                        right_pointer++;
+                        left_pointer = right_pointer;
+                        state = NumberParsingState.EXPONENT;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            FRACTION => {
+                // TODO: check bound, if len - 1 then assign fraction
+                if(Chars.isDecimal(json_string[right_pointer])) {
+                    right_pointer++;
+                } else {
+                    fraction = Ints.parseDecimal(
+                                Arrays.range(json_string, left_pointer, right_pointer), 0).1;
+                    if(json_string[right_pointer] == 'e' || json_string[right_pointer] == 'E') {
+                        right_pointer++;
+                        left_pointer = right_pointer;
+                        state = NumberParsingState.EXPONENT;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            EXPONENT => {
+                if(Chars.isDecimal(json_string[right_pointer])) {
+                    right_pointer++;
+                } else {
+                    exponent = Ints.parseDecimal(
+                                Arrays.range(json_string, left_pointer, right_pointer), 0).1;
+                    break;
+                }
+            }
+        }
+    }
+    var result: Json.Number;
+    if(is_float) {
+        var fraction_divider = 1f;
+        while(fraction_divider < float.!(fraction)) fraction_divider *= 10;
+        var float_result: float = float.!(integer) * (float.!(fraction)/fraction_divider) * float.!(exponent);
+        if(is_negative)
+            float_result *= -1;
+        result = Json.Number(JsonNumber.Float(float_result));
+    } else {
+        var int_result = integer * exponent;
+        if(is_negative)
+            int_result *= -1;
+        result = Json.Number(JsonNumber.Int(int_result));
+    }
+    return (result, right_pointer);
+}
+
+enum ArrayParsingState {
+    INITIAL,
+    PARSING_VALUE,
+    NEXT,
+}
+
+def parseArray(json_string: string) -> (Json.Array, int) {
+    var result: Json.Array = Json.Array(Vector<Json>.new());
+    var i = 0;
+    if (json_string[i] != '[') {
+        // TODO return error
+        return (result, 0);
+    }
+    i++;
+    var state = ArrayParsingState.INITIAL;
+    while(i < json_string.length) {
+        match(state) {
+            INITIAL => {
+                if(Strings.isWhiteSpace(json_string[i])) {
+                    i++;
+                } else if(json_string[i] == ']') {
+                    break;
+                } else {
+                    state = ArrayParsingState.PARSING_VALUE;
+                }
+            }
+            PARSING_VALUE => {
+                var val = Arrays.range(json_string, i, json_string.length);
+                var parse_result = parseValue(val);
+                var element = parse_result.0;
+                var length = parse_result.1;
+                result.put(element);
+                i+=length;
+                state = ArrayParsingState.NEXT;
+            }
+            NEXT => {
+                if(Strings.isWhiteSpace(json_string[i])) {
+                    i++;
+                } else if(json_string[i] == ']') {
+                    break;
+                } else if(json_string[i] == ',') {
+                    i++;
+                    // TODO: if out of bound, return error (no trailing comma in the end)
+                    while(Strings.isWhiteSpace(json_string[i]))
+                        i++;
+                    state = ArrayParsingState.PARSING_VALUE;
+                }
+            }
+        }
+    }
+    return (result, i);
+}
+
+enum ObjectParsingState {
     INITIAL,
     KEY,
     SEMICOLON,
-    DETERMINING_VALUE_TYPE,
-    PRIMITIVE_VALUE,
-    STRING_VALUE,
-    ARRAY_VALUE,
-    OBJECT_VALUE,
+    VALUE,
     END
 }
 
-component Jsons {
-    def newObject() -> JsonElement.Object {
-        return JsonElement.Object(HashMap<string, JsonElement>.new(Strings.hash, Strings.equal));
+def parseObject(json_string: string) -> (Json.Object, int) {
+    var result = Jsons.newObject();
+    var left_pointer = 0, right_pointer = 0;
+    if (json_string[right_pointer] != '{') {
+        // TODO return error
+        return (result, right_pointer);
     }
-    def create<T>(val: T) -> JsonElement {
-        var result: JsonElement;
-        match (val) {
-            x: JsonElement => result = x;
-            x: HashMap<string, JsonElement> => result = JsonElement.Object(x);
-            x: string => result = JsonElement.Value(x);
-            _ => System.error("TypeError", "not a JsonElement");
-        }
-        return result;
-    }
-    // TODO: I would love to enforce JsonElement.Object here, not sure how tho
-    def fromString(json_string: string) -> JsonElement {
-        var result = Jsons.newObject();
-        var left_pointer = 0, right_pointer = 0;
-        if (json_string[right_pointer] != '{') {
-            // TODO return error
-            return result;
-        }
-        // advances {
-        right_pointer++;
-        var state = ParsingState.INITIAL;
-        var key = "";
-        while (right_pointer < json_string.length) {
-            System.puts(state.name);
-            System.puts(" ");
-            System.puti(right_pointer);
-            System.puts(" ");
-            System.putc(json_string[right_pointer]);
-            System.puts("\n");
-            match (state) {
-                INITIAL => {
-                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
-                        right_pointer++;
-                    } else if (json_string[right_pointer] == '\"') {
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.KEY;
-                    } else if (json_string[right_pointer] == '}') {
-                        break;
-                    } else {
-                        // TODO return error
-                    }
+    // advances {
+    right_pointer++;
+    var state = ObjectParsingState.INITIAL;
+    var key = "";
+    while (right_pointer < json_string.length) {
+        match (state) {
+            INITIAL => {
+                if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                    right_pointer++;
+                } else if (json_string[right_pointer] == '\"') {
+                    left_pointer = right_pointer;
+                    right_pointer++;
+                    state = ObjectParsingState.KEY;
+                } else if (json_string[right_pointer] == '}') {
+                    break;
+                } else {
+                    // TODO return error
                 }
-                KEY => {
-                    // TODO: its a string, consider edge cases on \\b, \\n, etc.
-                    if(json_string[right_pointer] != '\"') {
-                        right_pointer++;
-                    } else {
-                        // left_pointer + 1 and right_pointer without - 1 for stripping ""
-                        key = Arrays.range(json_string, left_pointer+1, right_pointer);
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.SEMICOLON;
-                    }
+            }
+            KEY => {
+                // TODO: its a string, consider edge cases on \\b, \\n, etc.
+                if(json_string[right_pointer] != '\"') {
+                    right_pointer++;
+                } else {
+                    // left_pointer + 1 and right_pointer without - 1 for stripping ""
+                    key = Arrays.range(json_string, left_pointer+1, right_pointer);
+                    left_pointer = right_pointer;
+                    right_pointer++;
+                    state = ObjectParsingState.SEMICOLON;
                 }
-                SEMICOLON => {
-                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
-                        right_pointer++;
-                    } if(json_string[right_pointer] == ':') {
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.DETERMINING_VALUE_TYPE;
-                    } else {
-                        // TODO return error
-                    }
+            }
+            SEMICOLON => {
+                if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                    right_pointer++;
+                } if(json_string[right_pointer] == ':') {
+                    left_pointer = right_pointer;
+                    right_pointer++;
+                    state = ObjectParsingState.VALUE;
+                } else {
+                    // TODO return error
                 }
-                DETERMINING_VALUE_TYPE => {
-                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
-                        right_pointer++;
-                    } else if(json_string[right_pointer] == '[') {
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.ARRAY_VALUE;
-                    } else if(json_string[right_pointer] == '{') {
-                        state = ParsingState.OBJECT_VALUE;
-                    } else if(json_string[right_pointer] == '\"') {
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.STRING_VALUE;
-                    }  else {
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.PRIMITIVE_VALUE;
-                    }
+            }
+            VALUE => {
+                if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                    right_pointer++;
+                } else {
+                    var val = Arrays.range(json_string, right_pointer, json_string.length);
+                    var parse_result = parseValue(val);
+                    var element = parse_result.0;
+                    var length = parse_result.1;
+                    result.set(key, element);
+                    right_pointer += length + 1; 
+                    state = ObjectParsingState.END;
                 }
-                STRING_VALUE => {
-                    if(json_string[right_pointer] == '\"') {
-                        result.set(key, 
-                                Arrays.range(json_string, left_pointer, right_pointer + 1));
-                        right_pointer++;
-                        state = ParsingState.END;
-                    } else if(json_string[right_pointer] == '\\') {
-                        right_pointer++;
-                        // TODO: check bound
-                        if(json_string[right_pointer] == 'u') {
-                            right_pointer+=4;
-                        } else {
-                            right_pointer++;
-                        }
-                    } else {
-                        right_pointer++;
-                    }
-                }
-                PRIMITIVE_VALUE => {
-                    // TODO: this will not work for string, add STRING_VALUE
-                    if(json_string[right_pointer] == ',' 
-                        || json_string[right_pointer] == '}'
-                        || Strings.isWhiteSpace(json_string[right_pointer])) {
-                        result.set(key, Arrays.range(json_string, left_pointer, right_pointer));
-                        state = ParsingState.END;
-                    } else {
-                        right_pointer++;
-                    }
-                }
-                OBJECT_VALUE => {
-                    // the right_pointer does not match the 
-                    var obj = Jsons.fromString(
-                        Arrays.range(json_string, right_pointer, json_string.length));
-                    result.set(key, obj);
-                    right_pointer += obj.toString().length;
-                    state = ParsingState.END;
-                }
-                ARRAY_VALUE => {
-                    // TODO: add assertion of non-valid array value
-                    if(json_string[right_pointer] == ']') {
-                        result.set(key, Arrays.range(json_string, left_pointer, right_pointer+1));
-                        left_pointer = right_pointer;
-                        right_pointer++;
-                        state = ParsingState.END;
-                    } else {
-                        right_pointer++;
-                    }
-                }
-                END => {
-                    if(Strings.isWhiteSpace(json_string[right_pointer])) {
-                        right_pointer++;
-                    } else if(json_string[right_pointer] == ',') {
-                        right_pointer++;
-                        state = ParsingState.INITIAL;
-                    } else if(json_string[right_pointer] == '}') {
-                        break;
-                    } else {
-                        while(true);
-                    }
+            }
+            END => {
+                if(Strings.isWhiteSpace(json_string[right_pointer])) {
+                    right_pointer++;
+                } else if(json_string[right_pointer] == ',') {
+                    right_pointer++;
+                    state = ObjectParsingState.INITIAL;
+                } else if(json_string[right_pointer] == '}') {
+                    break;
+                } else {
+                    while(true);
                 }
             }
         }
+    }
+    return (result, right_pointer);
+}
+
+def parseValue(json_string: string) -> (Json, int) {
+    var parse_result: (Json, int);
+    if(json_string[0] == '[') {
+        parse_result = parseArray(json_string);
+    } else if(json_string[0] == '\"') {
+        parse_result = parseString(json_string);
+    } else if(json_string[0] == '{') {
+        parse_result = parseObject(json_string);
+    } else if(json_string[0] == '-' || Chars.isDecimal(json_string[0])) {
+        parse_result = parseNumber(json_string);
+    } else {
+        // TODO: null and bool
+    }
+    return parse_result;
+}
+
+component Jsons {
+    def newObject() -> Json.Object {
+        return Json.Object(HashMap<string, Json>.new(Strings.hash, Strings.equal));
+    }
+    def from<T>(val: T) -> Json {
+        var result: Json;
+        match (val) {
+            x: Json => result = x;
+            x: Vector<Json> => result = Json.Array(x);
+            x: HashMap<string, Json> => result = Json.Object(x);
+            x: string => result = Json.String(x);
+            x: Array<byte> => result = Json.String(x);
+            x: int => result = Json.Number(JsonNumber.Int(x));
+            x: float => result = Json.Number(JsonNumber.Float(x));
+            x: bool => result = Json.Bool(x);
+            _ => System.error("TypeError", "not a supported type for val in Jsons.from<T>(val:T)");
+        }
         return result;
+    }
+    def parse(json_string: string) -> Json {
+        // TODO: check bound, if exceed throw error (empty json string with whitespace)
+        var i = 0;
+        while(i < json_string.length && Strings.isWhiteSpace(json_string[i]))
+            i++;
+        var val = Arrays.range(json_string, i, json_string.length);
+        return parseValue(val).0;
     }
 }

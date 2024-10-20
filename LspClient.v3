@@ -45,27 +45,27 @@ def getContent(content_length: int) -> string {
     return if(System.fileReadK(STDIN, buf, 0, content_length) > 0, buf);
 }
 
-def encode(message: JsonElement.Object) -> string {
+def encode(message: Json.Object) -> string {
     var buf = StringBuilder.new();
-    var message_string = message.toString();
+    var message_string = message.toJsonString();
     buf.puts("Content-Length: ").putd(message_string.length).puts("\r\n\r\n");
     buf.puts(message_string);
     return buf.toString();
 }
 
 component LspClient {
-    def sendResponse(request: JsonElement) {
-        def method_with_literal = request.get("method").toString();
+    def sendResponse(request: Json) {
+        def method_with_literal = request.get("method").toJsonString();
         def method = Arrays.range(method_with_literal, 1, method_with_literal.length - 1);
         def message = LspMessage.getResponseByMethod(method);
         def response = encode(message);
         def STDOUT = 1;
         System.fileWriteK(STDOUT, response, 0, response.length);
     }
-    def getRequest() -> JsonElement {
+    def getRequest() -> Json {
         def header = getHeader();
         def content_length = getContentLength(header);
         def content = getContent(content_length);
-        return Jsons.fromString(content);
+        return Jsons.parse(content);
     }
 }

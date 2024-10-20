@@ -9,6 +9,6 @@ def main() {
     while (true) {
         var request = LspClient.getRequest();
         LspClient.sendResponse(request);
-        log(log_file_fd, request.toString());
+        log(log_file_fd, request.toJsonString());
     }
 }
