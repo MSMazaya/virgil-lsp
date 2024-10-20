@@ -22,7 +22,7 @@ type JsonNumber {
 type Json {
     def toJsonString() -> string;
     def get<T>(key: T) -> Json;
-    def set<K, T>(key: K, val: T);
+    def set<K, T>(key: K, val: T) -> Json;
     case Object(map: HashMap<string, Json>) {
         def toJsonString() -> string {
             var buf = StringBuilder.new();
@@ -45,18 +45,17 @@ type Json {
             var result: Json;
             match (key) {
                 x: string => result = map[x];
-                x: Array<byte> => result = map[x];
                 // TODO: change to return null
                 _ => System.error("TypeError", "Json.Object getter index must be a string");
             }
             return result;
         }
-        def set<K, T>(key: K, val: T) {
+        def set<K, T>(key: K, val: T) -> Json.Object {
             match (key) {
                 x: string => map[x] = Jsons.from(val);
-                x: Array<byte> => map[x] = Jsons.from(val);
                 _ => System.error("TypeError", "Json.Object setter index must be a string");
             }
+            return this;
         }
         def unbox() -> HashMap<string, Json> {
             return map;
@@ -82,11 +81,12 @@ type Json {
             }
             return result;
         }
-        def set<K, T>(key: K, val: T) {
+        def set<K, T>(key: K, val: T) -> Json.Array {
             match (key) {
                 i: int => vec[i] = Jsons.from(val);
                 _ => System.error("TypeError", "Json.Array setter index must be an integer");
             }
+            return this;
         }
         def unbox() -> Vector<Json> {
             return vec;
@@ -141,14 +141,44 @@ type Json {
     }
 }
 
+def parseNull(json_string: string) -> (Json.Null, int) {
+    if(json_string.length < 4)
+        // TODO: not a TypeError
+        System.error("TypeError", "invalid lengh of string for parseNull");
+
+    var result: (Json.Null, int);
+    if(Ranges.equal(json_string[0 ... 4], "null"))
+        result = (Json.Null, 4);
+    else
+        System.error("TypeError", "invalid value of string for parseNull");
+
+    return result;
+}
+
+def parseBool(json_string: string) -> (Json.Bool, int) {
+    if(json_string.length < 4)
+        // TODO: not a TypeError
+        System.error("TypeError", "invalid lengh of string for parseBool");
+
+    var result: (Json.Bool, int);
+    if(Ranges.equal(json_string[0 ... 5], "false"))
+        result = (Json.Bool(false), 5);
+    else if(Ranges.equal(json_string[0 ... 4], "true"))
+        result = (Json.Bool(true), 4);
+    else
+       // TODO: not a TypeError
+       System.error("TypeError", "invalid value of string for parseBool");
+
+    return result;
+}
+
 def parseString(json_string: string) -> (Json.String, int) {
     var i = 1;
     var result_string = "";
     // TODO: return error if not valid string (no ending \" and instead terminates when it reaches the end)
     while(i < json_string.length) {
         if(json_string[i] == '\"') {
-            i++;
-            result_string = Arrays.range(json_string, 0, i + 1);
+            result_string = Arrays.range(json_string, 1, i);
             break;
         } else if(json_string[i] == '\\') {
             i++;
@@ -162,7 +192,8 @@ def parseString(json_string: string) -> (Json.String, int) {
             i++;
         }
     }
-    return (Json.String(result_string), i);
+    // taking into account the \" in length, thus i+1
+    return (Json.String(result_string), i+1);
 }
 
 enum NumberParsingState {
@@ -287,6 +318,7 @@ def parseArray(json_string: string) -> (Json.Array, int) {
                 if(Strings.isWhiteSpace(json_string[i])) {
                     i++;
                 } else if(json_string[i] == ']') {
+                    i++;
                     break;
                 } else if(json_string[i] == ',') {
                     i++;
@@ -378,6 +410,7 @@ def parseObject(json_string: string) -> (Json.Object, int) {
                     right_pointer++;
                     state = ObjectParsingState.INITIAL;
                 } else if(json_string[right_pointer] == '}') {
+                    right_pointer++;
                     break;
                 } else {
                     while(true);
@@ -398,8 +431,10 @@ def parseValue(json_string: string) -> (Json, int) {
         parse_result = parseObject(json_string);
     } else if(json_string[0] == '-' || Chars.isDecimal(json_string[0])) {
         parse_result = parseNumber(json_string);
-    } else {
-        // TODO: null and bool
+    } else if(json_string[0] == 'f' | json_string[0] == 't') {
+        parse_result = parseBool(json_string);
+    } else if(json_string[0] == 'n') {
+        parse_result = parseNull(json_string);
     }
     return parse_result;
 }
@@ -415,7 +450,6 @@ component Jsons {
             x: Vector<Json> => result = Json.Array(x);
             x: HashMap<string, Json> => result = Json.Object(x);
             x: string => result = Json.String(x);
-            x: Array<byte> => result = Json.String(x);
             x: int => result = Json.Number(JsonNumber.Int(x));
             x: float => result = Json.Number(JsonNumber.Float(x));
             x: bool => result = Json.Bool(x);
