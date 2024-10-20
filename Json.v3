@@ -4,17 +4,11 @@ type JsonNumber {
         def toString() -> string {
             return StringBuilder.new().putd(val).toString();
         }
-        def unbox() -> int {
-            return val;
-        }
     }
     case Float(val: float) {
         def toString() -> string {
             // TODO: implement string to float
             return "";
-        }
-        def unbox() -> float {
-            return val;
         }
     }
 }
@@ -57,9 +51,6 @@ type Json {
             }
             return this;
         }
-        def unbox() -> HashMap<string, Json> {
-            return map;
-        }
     }
     case Array(vec: Vector<Json>) {
         def toJsonString() -> string {
@@ -88,9 +79,6 @@ type Json {
             }
             return this;
         }
-        def unbox() -> Vector<Json> {
-            return vec;
-        }
         def put(el:Json) {
             vec.put(el);
         }
@@ -99,37 +87,17 @@ type Json {
         def toJsonString() -> string {
             return StringBuilder.new().putsq(val).toString();
         }
-        def unbox() -> string {
-            return val;
-        }
         // TODO: implement get that returns null
     }
     case Number(val: JsonNumber) {
         def toJsonString() -> string {
             return StringBuilder.new().puts(val.toString()).toString();
         }
-        def unboxInt() -> int {
-            match (val) {
-                i: JsonNumber.Int => return i.unbox();
-                _ => System.error("TypeError", "Json.Number value must be JsonNumber.Int for unboxInt");
-            }
-            return 0;
-        }
-        def unboxFloat() -> float {
-            match (val) {
-                f: JsonNumber.Float => return f.unbox();
-                _ => System.error("TypeError", "Json.Number value must be JsonNumber.Float for unboxFloat");
-            }
-            return 0f;
-        }
         // TODO: implement get that returns null
     }
     case Bool(val: bool) {
         def toJsonString() -> string {
             return if(val, "true", "false");
-        }
-        def unbox() -> bool {
-            return val;
         }
         // TODO: implement get that returns null
     }
@@ -464,5 +432,53 @@ component Jsons {
             i++;
         var val = Arrays.range(json_string, i, json_string.length);
         return parseValue(val).0;
+    }
+    def unbox<T>(json: Json) -> T {
+        match(json) {
+            x: Json.Object => {
+                if(T.?(x.map))
+                    return T.!(x.map);
+                System.error("TypeError", "not a supported type for unboxing Json.Object");
+                return T.!(null);
+            }
+            x: Json.Array => {
+                if(T.?(x.vec))
+                    return T.!(x.vec);
+                System.error("TypeError", "not a supported type for unboxing Json.Array");
+                return T.!(null);
+            }
+            x: Json.String => {
+                if(T.?(x.val))
+                    return T.!(x.val);
+                System.error("TypeError", "not a supported type for unboxing Json.String");
+                return T.!(null);
+            }
+            x: Json.Bool => {
+                if(T.?(x.val))
+                    return T.!(x.val);
+                System.error("TypeError", "not a supported type for unboxing Json.Number");
+                return T.!(null);
+            }
+            x: Json.Number => {
+                match (x.val) {
+                    i: JsonNumber.Int => {
+                        if(T.?(i.val))
+                            return T.!(i.val);
+                        System.error("TypeError", "not a supported type for unboxing Json.Number(JsonNumber.Int)");
+                    }
+                    f: JsonNumber.Float => {
+                        if(T.?(f.val))
+                            return T.!(f.val);
+                        System.error("TypeError", "not a supported type for unboxing Json.Number(JsonNumber.Float)");
+                   }
+                }
+                System.error("TypeError", "not a supported type for unboxing Json.Bool");
+                return T.!(null);
+            }
+            x: Json.Null => {
+                System.error("TypeError", "Json.Null does not support unboxing");
+                return T.!(null);
+           }
+        }
     }
 }

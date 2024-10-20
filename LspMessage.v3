@@ -1,19 +1,29 @@
-def createBaseResponse() -> Json.Object {
+def createBaseResponse(request_id: int) -> Json.Object {
     var base_response = Jsons.newObject();
-    base_response.set("json_rpc", "\"2.0\"");
+    base_response.set("jsonrpc", "2.0");
+    base_response.set("id", request_id);
     return base_response;
 }
 
-def createInitializeResponse() -> Json.Object {
-    var response = createBaseResponse();
-    response.set("capabilities", Jsons.newObject());
+def createInitializeResponse(request_id: int) -> Json.Object {
+    var capabilities = Jsons.newObject()
+        .set("textDocumentSync", 1)
+        .set("diagnosticProvider", true);
+    var server_info = Jsons.newObject()
+        .set("name", "virgil-lsp")
+        .set("version", "0.0");
+    var result = Jsons.newObject()
+        .set("capabilities", capabilities)
+        .set("serverInfo", server_info);
+    var response = createBaseResponse(request_id)
+        .set("result", result);
     return response;
 }
 
 component LspMessage {
-    def getResponseByMethod(method: string) -> Json.Object {
+    def getResponseByMethod(method: string, request_id: int) -> Json.Object {
         if(Strings.equal(method,"initialize")) {
-            return createInitializeResponse();
+            return createInitializeResponse(request_id);
         }
         // TODO: error instead
         return Jsons.newObject();

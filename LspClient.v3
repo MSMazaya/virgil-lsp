@@ -55,9 +55,9 @@ def encode(message: Json.Object) -> string {
 
 component LspClient {
     def sendResponse(request: Json) {
-        def method_with_literal = request.get("method").toJsonString();
-        def method = Arrays.range(method_with_literal, 1, method_with_literal.length - 1);
-        def message = LspMessage.getResponseByMethod(method);
+        def method: string = Jsons.unbox(request.get("method"));
+        def request_id: int = Jsons.unbox(request.get("id"));
+        def message = LspMessage.getResponseByMethod(method, request_id);
         def response = encode(message);
         def STDOUT = 1;
         System.fileWriteK(STDOUT, response, 0, response.length);
