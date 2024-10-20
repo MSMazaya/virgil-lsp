@@ -97,7 +97,7 @@ type Json {
     }
     case String(val: string) {
         def toJsonString() -> string {
-            return StringBuilder.new().putc('\"').puts(val).putc('\"').toString();
+            return StringBuilder.new().putsq(val).toString();
         }
         def unbox() -> string {
             return val;
@@ -147,6 +147,7 @@ def parseString(json_string: string) -> (Json.String, int) {
     // TODO: return error if not valid string (no ending \" and instead terminates when it reaches the end)
     while(i < json_string.length) {
         if(json_string[i] == '\"') {
+            i++;
             result_string = Arrays.range(json_string, 0, i + 1);
             break;
         } else if(json_string[i] == '\\') {
@@ -366,7 +367,7 @@ def parseObject(json_string: string) -> (Json.Object, int) {
                     var element = parse_result.0;
                     var length = parse_result.1;
                     result.set(key, element);
-                    right_pointer += length + 1; 
+                    right_pointer += length ; 
                     state = ObjectParsingState.END;
                 }
             }
